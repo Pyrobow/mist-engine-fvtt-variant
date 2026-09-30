@@ -58,12 +58,14 @@ export async function createDetailedMessage(chatVars, speaker) {
         // static parts needed to re-render the card
         label: chatVars.label,
         diceRollHTML: chatVars.diceRollHTML,
+        riskRollHTML: chatVars.riskRollHTML,
         positiveTags: chatVars.positiveTags,
         negativeTags: chatVars.negativeTags,
         consequenceResult: chatVars.consequenceResult,
         isCritical: chatVars.isCritical,
         isFumble: chatVars.isFumble,
         numPowerTags: chatVars.numPowerTags,
+        highest: chatVars.highest,
     };
     const content = await renderDetailedCard(data);
     return ChatMessage.create({ content, speaker, flags: { [SCOPE]: { [FLAG]: data } } });

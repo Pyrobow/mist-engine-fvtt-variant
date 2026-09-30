@@ -22,6 +22,8 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         this.numModPositive = 0;
         this.numModNegative = 0;
         this.mightScale = 0;
+        this.riskLevel = "risky"
+        this.effect = "standard"
 
         // pending GM confirmation: { requestId, formValues, snapshot } or null
         this.pendingRequest = null;
@@ -187,6 +189,8 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         context.numModPositive = this.numModPositive || 0;
         context.numModNegative = this.numModNegative || 0;
         context.mightScale = this.mightScale;
+        context.riskLevel = this.riskLevel;
+        context.effect = this.effect;
         context.mightUsageEnabled = game.settings.get("mist-engine-fvtt", "mightUsageEnabled");
         if (context.mightUsageEnabled == false) { // just to be sure
             context.mightScale = 0;
@@ -272,6 +276,42 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
                 if (radio.checked) {
                     this.mightScale = parseInt(radio.value) || 0;
                     updatePowerLabel();
+                }
+            });
+        }
+
+        for (const radio of this.element.querySelectorAll('.risk-level-radio')) {
+            radio.addEventListener('change', () => {
+                if (radio.checked) {
+                    switch (radio.value) {
+                        case "controlled":
+                            this.riskLevel = "controlled"
+                            break;
+                        case "risky":
+                            this.riskLevel = "risky"
+                            break;
+                        case "desperate":
+                            this.riskLevel = "desperate"
+                            break;
+                    }
+                }
+            });
+        }
+
+        for (const radio of this.element.querySelectorAll('.effect-scale-radio')) {
+            radio.addEventListener('change', () => {
+                if (radio.checked) {
+                    switch (radio.value) {
+                        case "limited":
+                            this.effect = "limited"
+                            break;
+                        case "standard":
+                            this.effect = "standard"
+                            break;
+                        case "great":
+                            this.effect = "great"
+                            break;
+                    }
                 }
             });
         }
@@ -537,14 +577,14 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
             }
 
             if (item.type === "themebook") {
-                if(item.system.powertags){
+                if (item.system.powertags) {
                     item.system.powertags.forEach((tag, i) => {
                         if (tag.selected) {
                             selectedTags.push({ name: tag.name, positive: true, powerTag: true, toBurn: tag.toBurn, index: i, themebookId: item.id, source: null });
                         }
                     });
                 }
-                if(item.system.weaknesstags){
+                if (item.system.weaknesstags) {
                     item.system.weaknesstags.forEach((tag, i) => {
                         if (tag.selected) {
                             selectedTags.push({ name: tag.name, positive: false, weakness: true, index: i, themebookId: item.id, source: null });
@@ -591,8 +631,8 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         if (actor.system.floatingTagsAndStatuses && actor.system.floatingTagsAndStatuses.length > 0) {
             actor.system.floatingTagsAndStatuses.forEach((entry, index) => {
                 if (entry.selected) {
-                    let t = { name: entry.name, positive: entry.positive, source: "floating-tag", value: entry.value,index: index + 1,isStatus: entry.isStatus, might: entry.might, mightIcon: entry.mightIcon, isClickable: true };
-                    if(entry.value === undefined || entry.value > 0){
+                    let t = { name: entry.name, positive: entry.positive, source: "floating-tag", value: entry.value, index: index + 1, isStatus: entry.isStatus, might: entry.might, mightIcon: entry.mightIcon, isClickable: true };
+                    if (entry.value === undefined || entry.value > 0) {
                         t.isStatus = true;
                     }
                     selectedTags.push(t);
@@ -919,10 +959,6 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
         const dicePromises = [];
 
-        let rollFormula = `2d6`;
-        if (numPositiveTags > 0) rollFormula += ` + ${numPositiveTags}`;
-        if (numNegativeTags > 0) rollFormula += ` - ${numNegativeTags}`;
-
         let numPowerTags = parseInt(numPositiveTags) - parseInt(numNegativeTags);
 
         if (mightScale != 0) {
@@ -930,49 +966,73 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
             numPowerTags += mightScale;
         }
 
+        let usablePower = 0
+
         // clamp only AFTER might is applied, otherwise a negative tag total
         // gets lifted to 1 first and might is added on top (issue #97)
-        if (numPowerTags <= 0) numPowerTags = 1; // at least 1 power tag
+        switch (this.effect) {
+            case "limited":
+                usablePower = 1;
+                break;
+            case "standard":
+                usablePower = 2;
+                break;
+            case "great":
+                usablePower = 3;
+                break;
+        }
+
+        let rollFormula = `1d6`;
+        if (numPowerTags <= 0) {
+            rollFormula = '2d6kl';
+        } else {
+            rollFormula = `${numPowerTags}d6`;
+        }
+
+        let riskRollFormula = `1d6`;
+        if (this.riskLevel === "controlled") {
+            riskRollFormula = `2d6kh`
+        } else if (this.riskLevel === "desperate") {
+            riskRollFormula = `2d6kl`
+        }
+
 
         const diceRoll = new Roll(rollFormula, this.actor.getRollData());
         await diceRoll.evaluate();
+        const riskRoll = new Roll(riskRollFormula, this.actor.getRollData());
+        await riskRoll.evaluate();
 
         this.addShowDicePromise(dicePromises, diceRoll);
         await Promise.all(dicePromises);
 
-        let diceResults = [...diceRoll.terms[0].results].map(r => r.result);
-
-        let isCritical = (diceResults[0] === 6 && diceResults[1] === 6);
-        let isFumble = (diceResults[0] === 1 && diceResults[1] === 1);
-
+        let diceResults = [...diceRoll.terms[0].results].filter(r => r.active).map(r => r.result);
         let diceRollHTML = await diceRoll.render();
-
+        let riskRollHTML = await riskRoll.render();
         let consequenceResult = -1;
-        if (diceRoll.total >= 10) {
+        let highest = Math.max(...diceResults)
+        if (highest > 3 && riskRoll.total > 3) {
             consequenceResult = 1;
         }
-        else if (diceRoll.total >= 7 && diceRoll.total <= 9) {
+        else if (highest > 3 && riskRoll.total < 4) {
             consequenceResult = 0;
         }
-
-        // double sixes always mean Success without Consequences, double ones
-        // always Consequences without Success — regardless of Power!!!!
-        if (isCritical) consequenceResult = 1;
-        if (isFumble) consequenceResult = -1;
+        usablePower += diceResults.filter(r => r === 6).length;
 
         let positiveTags = [...tagsAndStatusForRoll.filter(t => t.positive), ...helpingContribs];
         let negativeTags = tagsAndStatusForRoll.filter(t => !t.positive);
 
         const chatVars = {
             diceRollHTML: diceRollHTML,
+            riskRollHTML: riskRollHTML,
             label: game.i18n.localize(`MIST_ENGINE.ROLL_TYPES.${this.rollType}`),
             tagsAndStatusForRoll: this.tagsAndStatusForRoll,
             positiveTags: positiveTags,
             negativeTags: negativeTags,
             consequenceResult: consequenceResult,
-            isCritical: isCritical,
-            isFumble: isFumble,
-            numPowerTags: numPowerTags,
+            isCritical: riskRoll.total === 6,
+            isFumble: riskRoll.total === 1,
+            numPowerTags: usablePower,
+            highest: highest
         };
 
         const speaker = ChatMessage.getSpeaker({ actor: this.actor });
@@ -990,6 +1050,8 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         this.numModPositive = 0;
         this.numModNegative = 0;
         this.mightScale = 0;
+        this.riskLevel = "risky";
+        this.effect = "standard";
         this.helpingTags = [];
         this.pendingHelpReqId = null;
         this.invertedTags.clear(); // #35: the inversion only applied to this roll

@@ -1,0 +1,15 @@
+<div>
+        <div class="scene-app-might-modifier">
+                <div class="npc-subtitle-container-c">
+                        <div class="npc-subtitle-text">Risk </div>
+                </div>
+                <div class="flexrow">
+                        <div class="might-scale-entry"><input type="radio" name="risk_level" class="risk-level-radio"
+                                        value="controlled" {{#if (eq riskLevel "controlled")}}checked{{/if}}>Controlled</div>
+                        <div class="might-scale-entry"><input type="radio" name="risk_level" class="risk-level-radio"
+                                        value="risky" {{#if (eq riskLevel "risky")}}checked{{/if}}>Risky</div>
+                        <div class="might-scale-entry"><input type="radio" name="risk_level" class="risk-level-radio"
+                                        value="desperate" {{#if (eq riskLevel "desperate")}}checked{{/if}}>Desperate</div>
+                </div>
+        </div>
+</div>
