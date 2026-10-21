@@ -967,9 +967,6 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         }
 
         let usablePower = 0
-
-        // clamp only AFTER might is applied, otherwise a negative tag total
-        // gets lifted to 1 first and might is added on top (issue #97)
         switch (this.effect) {
             case "limited":
                 usablePower = 1;
@@ -1003,6 +1000,7 @@ export class DiceRollApp extends HandlebarsApplicationMixin(ApplicationV2) {
         await riskRoll.evaluate();
 
         this.addShowDicePromise(dicePromises, diceRoll);
+        this.addShowDicePromise(dicePromises, riskRoll);
         await Promise.all(dicePromises);
 
         let diceResults = [...diceRoll.terms[0].results].filter(r => r.active).map(r => r.result);

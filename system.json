@@ -38,7 +38,7 @@
       "flags": {}
     }
   ],
-  "version": "14.5.4",
+  "version": "0.0.2-alpha",
   "compatibility": {
     "minimum": "13",
     "verified": "14"
@@ -128,8 +128,8 @@
     }
   ],
   "socket": true,
-  "manifest": "https://github.com/MrTheBino/mist-engine-fvtt/releases/latest/download/system.json",
-  "download": "https://github.com/MrTheBino/mist-engine-fvtt/releases/download/14.4.2/system.zip",
+  "manifest": "https://github.com/Pyrobow/mist-engine-fvtt-variant/releases/download/v0.0.2-alpha/system.json",
+  "download": "https://github.com/Pyrobow/mist-engine-fvtt-variant/releases/download/v0.0.2-alpha/system.zip",
   "background": "systems/mist-engine-fvtt/assets/landingpage.webp",
   "primaryTokenAttribute": "health",
   "secondaryTokenAttribute": "power",

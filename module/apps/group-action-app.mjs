@@ -18,6 +18,8 @@ export class GroupActionApp extends HandlebarsApplicationMixin(ApplicationV2) {
         this.groupId = null;
         this.contributions = []; // { actorName, tagName, burn }
         this.gmMod = 0;
+        this.riskLevel = "risky"
+        this.effect = "standard"
         GroupActionApp.instance = this;
     }
 
@@ -62,6 +64,8 @@ export class GroupActionApp extends HandlebarsApplicationMixin(ApplicationV2) {
         context.started = !!this.groupId;
         context.contributions = this.contributions;
         context.gmMod = this.gmMod;
+        context.riskLevel = this.riskLevel;
+        context.effect = this.effect;
         context.power = this.computePower();
         context.hasBurn = this.contributions.some(c => c.burn);
         return context;
@@ -92,6 +96,8 @@ export class GroupActionApp extends HandlebarsApplicationMixin(ApplicationV2) {
         this.groupId = foundry.utils.randomID();
         this.contributions = [];
         this.gmMod = 0;
+        this.riskLevel = "risky"
+        this.effect = "standard"
         game.socket.emit(Collaboration.SOCKET, { action: "groupStart", groupId: this.groupId, gmUserId: game.user.id });
         ui.notifications.info(game.i18n.localize("MIST_ENGINE.COLLAB.GroupStarted"));
         this.render();
@@ -108,25 +114,62 @@ export class GroupActionApp extends HandlebarsApplicationMixin(ApplicationV2) {
     static async #handleRoll(event, target) {
         if (!this.groupId) return;
         const power = this.computePower();
-        let formula = "2d6";
-        if (power > 0) formula += ` + ${power}`;
-        const roll = new Roll(formula);
-        await roll.evaluate();
-        if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true, null, false);
+        let rollFormula = `1d6`;
+        if (power <= 0) {
+            rollFormula = '2d6kl';
+        } else {
+            rollFormula = `${power}d6`;
+        }
 
-        const dice = roll.terms[0].results.map(r => r.result);
-        const isCritical = dice[0] === 6 && dice[1] === 6;
-        const isFumble = dice[0] === 1 && dice[1] === 1;
-        let consequenceResult = roll.total >= 10 ? 1 : roll.total >= 7 ? 0 : -1;
-        if (isCritical) consequenceResult = 1;
-        if (isFumble) consequenceResult = -1;
+        let riskRollFormula = `1d6`;
+        if (this.riskLevel === "controlled") {
+            riskRollFormula = `2d6kh`
+        } else if (this.riskLevel === "desperate") {
+            riskRollFormula = `2d6kl`
+        }
+    
+        const diceRoll = new Roll(rollFormula);
+        await diceRoll.evaluate();
+        if (game.dice3d) await game.dice3d.showForRoll(diceRoll, game.user, true, null, false);
+        const riskRoll = new Roll(riskRollFormula);
+        await riskRoll.evaluate();
+
+        let diceResults = [...diceRoll.terms[0].results].filter(r => r.active).map(r => r.result);
+        let diceRollHTML = await diceRoll.render();
+        let riskRollHTML = await riskRoll.render();
+        let consequenceResult = -1;
+        let highest = Math.max(...diceResults)
+        if (highest > 3 && riskRoll.total > 3) {
+            consequenceResult = 1;
+        }
+        else if (highest > 3 && riskRoll.total < 4) {
+            consequenceResult = 0;
+        }
+        let usablePower = 0
+        switch (this.effect) {
+            case "limited":
+                usablePower = 1;
+                break;
+            case "standard":
+                usablePower = 2;
+                break;
+            case "great":
+                usablePower = 3;
+                break;
+        }
+
+        usablePower += diceResults.filter(r => r === 6).length;
+        let isCritical = riskRoll.total === 6
+        let isFumble = riskRoll.total === 1
 
         const html = await foundry.applications.handlebars.renderTemplate(
             "systems/mist-engine-fvtt/templates/chat/group-result.hbs",
             {
-                diceRollHTML: await roll.render(),
+                diceRollHTML: diceRollHTML,
+                riskRollHTML: riskRollHTML,
                 contributions: this.contributions,
-                power, consequenceResult, isCritical, isFumble,
+                highest: highest,
+                power:usablePower, consequenceResult, isCritical, isFumble,
             }
         );
         await ChatMessage.create({ content: html, speaker: { alias: game.i18n.localize("MIST_ENGINE.COLLAB.GroupTitle") } });
@@ -136,6 +179,8 @@ export class GroupActionApp extends HandlebarsApplicationMixin(ApplicationV2) {
         this.groupId = null;
         this.contributions = [];
         this.gmMod = 0;
+        this.effect = "standard";
+        this.riskLevel = "risky";
         this.close();
     }
 }
